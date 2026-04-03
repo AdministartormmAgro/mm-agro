@@ -298,6 +298,9 @@ footer{background:var(--foot-bg);padding:9px 22px;display:flex;align-items:cente
 
   /* Dashboard tiles - 2 stĺpce */
   .dtiles { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dtile { padding: 10px; }
+  .dtile .dnum { font-size: 15px !important; }
+  .dtile .dlbl { font-size: 10px; }
 
   /* Formuláre - full width */
   .fgrid { grid-template-columns: 1fr; }
@@ -337,8 +340,53 @@ footer{background:var(--foot-bg);padding:9px 22px;display:flex;align-items:cente
   .dh-su { font-size: 11px; }
 
   /* Adstats väčšie hodnoty */
-  .adsval { font-size: 20px; }
+  .adsval { font-size: 16px; }
+  .dnum { font-size: 16px !important; }
+  .sval { font-size: 16px !important; }
+  .schip { padding: 8px 10px; }
+  .adstat { padding: 8px 10px; }
 }
+
+
+  /* Lepšie karty na mobile */
+  .content { padding: 10px 8px 76px; }
+  
+  /* Topbar na mobile */
+  .topbar { padding: 0 10px; }
+  
+  /* Formulárové polia väčšie */
+  .finp, .fsel { padding: 13px 14px; font-size: 15px; border-radius: 10px; }
+  .flbl { font-size: 11px; margin-bottom: 5px; }
+  
+  /* Tlačidlá väčšie */
+  .bpri, .bsave { padding: 14px; font-size: 15px; border-radius: 12px; }
+  
+  /* Záznamy v tabuľke — väčšie riadky */
+  .rtable td, .rtable th { padding: 9px 7px; font-size: 11px; }
+  .rtag { font-size: 10px; padding: 2px 6px; }
+  
+  /* Edit/Delete tlačidlá väčšie */
+  .redit, .rdel { width: 36px !important; height: 36px !important; font-size: 15px !important; }
+  
+  /* Hero banner */
+  .dhero { padding: 12px; }
+  .dhero h2 { font-size: 15px; }
+  .dhero p { font-size: 11px; }
+  
+  /* Period buttony */
+  .pbtn { padding: 7px 12px; font-size: 11px; }
+  
+  /* Kalendár */
+  .dc { min-height: 48px; }
+  
+  /* Modálne okná lepšie */
+  .mbox { padding: 20px 16px; }
+  .mtitle { font-size: 16px; }
+  
+  /* Štatistiky - menší text v labeloch */
+  .adslbl { font-size: 9px; }
+  .slbl { font-size: 10px; }
+  .ssub { font-size: 9px; }
 
 /* ===== MOBILE BOTTOM TAB BAR ===== */
 .mob-tabbar {
@@ -388,7 +436,7 @@ footer{background:var(--foot-bg);padding:9px 22px;display:flex;align-items:cente
 </style>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 // ============================================================
@@ -416,15 +464,14 @@ window._fbReady = false;
 window._fbUser = null;
 
 // Firebase helpers - GLOBÁLNE FUNKCIE pre zápis/čítanie
+// === ZDIEĽANÉ DÁTA (všetci užívatelia vidia rovnaké záznamy) ===
 window.fbSaveRecords = async function(recs) {
   if(!window._fbUser) return;
-  const uid = window._fbUser.uid;
-  await setDoc(doc(db,'users',uid,'data','records'), {list: recs, ts: Date.now()});
+  await setDoc(doc(db,'company','mmagro','data','records'), {list: recs, ts: Date.now()});
 };
 window.fbSaveTank = async function(recs) {
   if(!window._fbUser) return;
-  const uid = window._fbUser.uid;
-  await setDoc(doc(db,'users',uid,'data','tank'), {list: recs, ts: Date.now()});
+  await setDoc(doc(db,'company','mmagro','data','tank'), {list: recs, ts: Date.now()});
 };
 window.fbSaveUser = async function(u) {
   if(!window._fbUser) return;
@@ -433,16 +480,45 @@ window.fbSaveUser = async function(u) {
 };
 window.fbLoadAll = async function(uid) {
   try {
-    const recSnap = await getDoc(doc(db,'users',uid,'data','records'));
+    // Zdieľané záznamy - rovnaké pre všetkých
+    const recSnap = await getDoc(doc(db,'company','mmagro','data','records'));
     if(recSnap.exists()) { records = recSnap.data().list || []; }
-    const tankSnap = await getDoc(doc(db,'users',uid,'data','tank'));
+    const tankSnap = await getDoc(doc(db,'company','mmagro','data','tank'));
     if(tankSnap.exists()) { tankRecs = tankSnap.data().list || []; }
+    // Profil - osobný pre každého
     const profileSnap = await getDoc(doc(db,'users',uid,'data','profile'));
     if(profileSnap.exists()) { user = {...user, ...profileSnap.data()}; }
   } catch(e) { console.warn('Firebase load error:', e); }
-  // Refresh UI
   applyUser(); renderCal(); renderBelowList(); renderVList();
   renderDashParcels(); renderDashCharts(); renderTankList(); updateTankStats(); renderAdDay();
+};
+// Real-time listener pre zdieľané dáta
+window.fbListenShared = function() {
+  if(!window._fbUser) return;
+  // Počúvaj na zmeny records
+  onSnapshot(doc(db,'company','mmagro','data','records'), (snap) => {
+    if(snap.exists()) {
+      const newRecs = snap.data().list || [];
+      // Aktualizuj len ak sa zmenili
+      if(JSON.stringify(newRecs) !== JSON.stringify(records)) {
+        records = newRecs;
+        localStorage.setItem('mmRec', JSON.stringify(records));
+        renderCal(); renderBelowList(); renderVList();
+        renderDashParcels(); renderDashCharts(); updateStats(); renderAdDay();
+      }
+    }
+  });
+  // Počúvaj na zmeny tank
+  onSnapshot(doc(db,'company','mmagro','data','tank'), (snap) => {
+    if(snap.exists()) {
+      const newTank = snap.data().list || [];
+      if(JSON.stringify(newTank) !== JSON.stringify(tankRecs)) {
+        tankRecs = newTank;
+        localStorage.setItem('mmTank', JSON.stringify(tankRecs));
+        renderTankList(); updateTankStats();
+      }
+    }
+  });
 };
 
 // Auth state
@@ -466,7 +542,7 @@ onAuthStateChanged(auth, async (u) => {
     $('fbLogin').style.display='none';
     $('fbChangePw').style.display='none';
     $('app').style.display='flex';
-    window.fbLoadAll(u.uid);
+    window.fbLoadAll(u.uid).then(() => { if(window.fbListenShared) window.fbListenShared(); });
   } else {
     $('fbLogin').style.display='flex';
     $('fbChangePw').style.display='none';
@@ -1107,7 +1183,7 @@ function renderMarkedReport(){
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
       <div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#39ff14;font-family:'JetBrains Mono',monospace;">${v}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;">Vývozy</div></div>
-      <div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#facc15;font-family:'JetBrains Mono',monospace;">${m3.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;">m³</div></div>
+      <div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#facc15;font-family:'JetBrains Mono',monospace;">${m3.toFixed(2)}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;">m³</div></div>
       <div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#3b82f6;font-family:'JetBrains Mono',monospace;">${km.toLocaleString()}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;">km</div></div>
       <div style="text-align:center;"><div style="font-size:18px;font-weight:700;color:#ef4444;font-family:'JetBrains Mono',monospace;">${suma.toFixed(2)}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;">€</div></div>
     </div>
@@ -1135,7 +1211,9 @@ function renderBelowList(){
     html+=`<th class="rc">#</th><th>${t('thDatum')}</th><th>${t('thParcela')}</th><th class="rc">${t('thM3')}</th><th class="rc">${t('thKm')}</th><th class="rc">${t('thCena')}</th><th>${t('thAkcie')}</th></tr></thead><tbody>`;
     recs.forEach((rec,i)=>{
       const dd=dFromKey(rec.datum).toLocaleDateString(loc,{day:'2-digit',month:'2-digit',year:'numeric'});
-      html+=`<tr><td class="rnum">${i+1}</td><td class="rdate">${dd}</td><td class="rname">🚛 ${esc(rec.parcela||'')}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(1)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td><td><div class="racts"><button class="redit" onclick="openEdit(${records.indexOf(rec)})">✏️</button><button class="rdel" onclick="delRec(${records.indexOf(rec)})">✕</button></div></td></tr>`;
+      const authorBadge = rec.createdBy ? `<div style="font-size:9px;color:var(--muted);margin-top:1px">${rec.editedBy?'✏️ '+rec.editedBy:'👤 '+rec.createdBy}</div>` : '';
+    const ab2 = rec.createdBy ? `<div style="font-size:9px;color:var(--muted);margin-top:1px">${rec.editedBy?'✏️ '+rec.editedBy:'👤 '+rec.createdBy}</div>` : '';
+    html+=`<tr><td class="rnum">${i+1}</td><td class="rdate">${dd}</td><td class="rname">🚛 ${esc(rec.parcela||'')}${ab2}${authorBadge}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(2)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td><td><div class="racts"><button class="redit" onclick="openEdit(${records.indexOf(rec)})">✏️</button><button class="rdel" onclick="delRec(${records.indexOf(rec)})">✕</button></div></td></tr>`;
     });
     html+='</tbody></table>';
     body.innerHTML=html;
@@ -1155,7 +1233,7 @@ function renderBelowList(){
       html+=`<th class="rc">#</th><th>${t('thDatum')}</th><th>${t('thParcela')}</th><th class="rc">${t('thM3')}</th><th class="rc">${t('thKm')}</th><th class="rc">${t('thCena')}</th><th>${t('thAkcie')}</th></tr></thead><tbody>`;
       weekRecs.forEach((rec,i)=>{
         const dd=dFromKey(rec.datum).toLocaleDateString(loc,{day:'2-digit',month:'2-digit',year:'numeric'});
-        html+=`<tr><td class="rnum">${i+1}</td><td class="rdate">${dd}</td><td class="rname">🚛 ${esc(rec.parcela||'')}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(1)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td><td><div class="racts"><button class="redit" onclick="openEdit(${records.indexOf(rec)})">✏️</button><button class="rdel" onclick="delRec(${records.indexOf(rec)})">✕</button></div></td></tr>`;
+        html+=`<tr><td class="rnum">${i+1}</td><td class="rdate">${dd}</td><td class="rname">🚛 ${esc(rec.parcela||'')}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(2)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td><td><div class="racts"><button class="redit" onclick="openEdit(${records.indexOf(rec)})">✏️</button><button class="rdel" onclick="delRec(${records.indexOf(rec)})">✕</button></div></td></tr>`;
       });
       html+='</tbody></table>';
       body.innerHTML=html;
@@ -1170,7 +1248,7 @@ function renderBelowList(){
     let html='<table class="rtable"><thead><tr>';
     html+=`<th class="rc">#</th><th>${t('thParcela')}</th><th class="rc">${t('thM3')}</th><th class="rc">${t('thKm')}</th><th class="rc">${t('thCena')}</th><th>${t('thAkcie')}</th></tr></thead><tbody>`;
     dayRecs.forEach((rec,i)=>{
-      html+=`<tr><td class="rnum">${i+1}</td><td class="rname">🚛 ${esc(rec.parcela||'')}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(1)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td><td><div class="racts"><button class="redit" onclick="openEdit(${records.indexOf(rec)})">✏️</button><button class="rdel" onclick="delRec(${records.indexOf(rec)})">✕</button></div></td></tr>`;
+      html+=`<tr><td class="rnum">${i+1}</td><td class="rname">🚛 ${esc(rec.parcela||'')}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(2)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td><td><div class="racts"><button class="redit" onclick="openEdit(${records.indexOf(rec)})">✏️</button><button class="rdel" onclick="delRec(${records.indexOf(rec)})">✕</button></div></td></tr>`;
     });
     html+='</tbody></table>';
     body.innerHTML=html;
@@ -1227,9 +1305,9 @@ function updateStats(){
   const fKm=f.filter(r=>r.km>0).sort((a,b)=>a.ts-b.ts);
   const km=fKm.length>=2?Math.max(0,fKm[fKm.length-1].km-fKm[0].km):0;
   const sub=TR[lang].perSub[period];
-  set('sv1',v);set('sv2',m3.toFixed(1));set('sv3',km>0?km.toLocaleString():'—');set('sv4',suma.toFixed(2));
+  set('sv1',v);set('sv2',m3.toFixed(2));set('sv3',km>0?km.toLocaleString():'—');set('sv4',suma.toFixed(2));
   ['ss1','ss2','ss3','ss4'].forEach(id=>set(id,sub));
-  set('d-v',records.length);set('d-m',records.reduce((a,r)=>a+(+r.m3||0),0).toFixed(1)+' m³');
+  set('d-v',records.length);set('d-m',records.reduce((a,r)=>a+(+r.m3||0),0).toFixed(2)+' m³');
   const allKm=records.filter(r=>r.km>0).sort((a,b)=>a.ts-b.ts);
   const totalKm=allKm.length>=2?Math.max(0,allKm[allKm.length-1].km-allKm[0].km):0;
   set('d-k',totalKm>0?totalKm.toLocaleString()+' km':'— km');
@@ -1257,7 +1335,7 @@ function renderTLS(){
       <td class="rnum">${i+1}</td>
       <td class="rdate">${dd}</td>
       <td class="rname">🚛 ${esc(rec.parcela||'')}</td>
-      <td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(1)} m³</span></td>
+      <td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(2)} m³</span></td>
       <td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td>
       <td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td>
       <td><div class="racts"><button class="redit" onclick="openEdit(${records.indexOf(rec)})">✏️</button><button class="rdel" onclick="delRec(${records.indexOf(rec)})">✕</button></div></td>
@@ -1306,6 +1384,8 @@ function saveEdit(){
   rec.plne=parseFloat($('em-pl2').value)||rec.plne;
   const {diff,m3,cena}=calcEdit();
   if(diff>0){rec.diff=diff;rec.m3=m3.toFixed(3);rec.cena=cena.toFixed(2);}
+  rec.editedBy = user.name || window._fbUser?.email || 'Neznámy';
+  rec.editedTs = Date.now();
   svRec();closeEdit();renderCal();updateStats();renderBelowList();renderAdDay();renderVList();renderDashParcels();renderDashCharts();
 }
 $('editOv').addEventListener('click',e=>{if(e.target===$('editOv'))closeEdit();});
@@ -1327,7 +1407,7 @@ function renderAdDay(){
   let kmDnes=0;
   const sorted=[...todayRec].filter(r=>r.km>0).sort((a,b)=>a.ts-b.ts);
   if(sorted.length>=2)kmDnes=Math.max(0,sorted[sorted.length-1].km-sorted[0].km);
-  set('ad-v',todayRec.length);set('ad-m',m3.toFixed(1));set('ad-s',suma.toFixed(2));
+  set('ad-v',todayRec.length);set('ad-m',m3.toFixed(2));set('ad-s',suma.toFixed(2));
   set('ad-km',kmDnes>0?kmDnes.toLocaleString()+' km':'—');
   set('adBadge',todayRec.length);
   const body=$('adBody');if(!body)return;
@@ -1335,7 +1415,7 @@ function renderAdDay(){
   let html='<table class="rtable"><thead><tr>';
   html+=`<th class="rc">#</th><th>${t('thParcela')}</th><th class="rc">${t('thM3')}</th><th class="rc">${t('thKm')}</th><th class="rc">${t('thCena')}</th></tr></thead><tbody>`;
   todayRec.forEach((rec,i)=>{
-    html+=`<tr><td class="rnum">${i+1}</td><td class="rname">🚛 ${esc(rec.parcela||'')}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(1)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td></tr>`;
+    html+=`<tr><td class="rnum">${i+1}</td><td class="rname">🚛 ${esc(rec.parcela||'')}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(2)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td></tr>`;
   });
 
   html+='</tbody></table>';body.innerHTML=html;
@@ -1387,7 +1467,7 @@ function renderVList(){
   html+=`<th class="rc">#</th><th>${t('thDatum')}</th><th>${t('thParcela')}</th><th class="rc">${t('thM3')}</th><th class="rc">${t('thKm')}</th><th class="rc">${t('thCena')}</th><th>${t('thAkcie')}</th></tr></thead><tbody>`;
   records.forEach((rec,i)=>{
     const dd=dFromKey(rec.datum).toLocaleDateString(loc,{day:'2-digit',month:'2-digit',year:'numeric'});
-    html+=`<tr><td class="rnum">${i+1}</td><td class="rdate">${dd}</td><td class="rname">🚛 ${esc(rec.parcela||'')}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(1)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td><td><div class="racts"><button class="redit" onclick="openEdit(${i})">✏️</button><button class="rdel" onclick="delRec(${i})">✕</button></div></td></tr>`;
+    html+=`<tr><td class="rnum">${i+1}</td><td class="rdate">${dd}</td><td class="rname">🚛 ${esc(rec.parcela||'')}</td><td style="text-align:center"><span class="rtag g">${(+rec.m3||0).toFixed(2)} m³</span></td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag r">${(+rec.cena||0).toFixed(2)} €</span></td><td><div class="racts"><button class="redit" onclick="openEdit(${i})">✏️</button><button class="rdel" onclick="delRec(${i})">✕</button></div></td></tr>`;
   });
   html+='</tbody></table>';body.innerHTML=html;
 }
@@ -1440,7 +1520,7 @@ function renderDashParcels(){
   const sorted=Object.entries(byP).sort((a,b)=>b[1].m3-a[1].m3);
   let html='<table class="rtable"><thead><tr><th>#</th><th id="dph-par">Parcela</th><th class="rc" id="dph-cnt">Vývozy</th><th class="rc" id="dph-m3">m³ spolu</th><th class="rc" id="dph-ce">Suma €</th></tr></thead><tbody>';
   sorted.forEach(([name,v],i)=>{
-    html+=`<tr><td class="rnum">${i+1}</td><td class="rname">${esc(name)}</td><td style="text-align:center"><span class="rtag g">${v.count}x</span></td><td style="text-align:center"><span class="rtag y">${v.m3.toFixed(1)} m³</span></td><td style="text-align:center"><span class="rtag r">${v.cena.toFixed(2)} €</span></td></tr>`;
+    html+=`<tr><td class="rnum">${i+1}</td><td class="rname">${esc(name)}</td><td style="text-align:center"><span class="rtag g">${v.count}x</span></td><td style="text-align:center"><span class="rtag y">${v.m3.toFixed(2)} m³</span></td><td style="text-align:center"><span class="rtag r">${v.cena.toFixed(2)} €</span></td></tr>`;
   });
   html+='</tbody></table>';
   body.innerHTML=html;
@@ -1488,11 +1568,14 @@ function renderTankList(){
   const body=$('tlBody');if(!body)return;
   const loc=lang==='sk'?'sk-SK':'en-GB';
   if(!tankRecs.length){body.innerHTML='<div style="text-align:center;color:var(--muted);padding:18px;font-size:13px">Žiadne záznamy tankovania</div>';return;}
-  let html='<table class="rtable"><thead><tr><th class="rc">#</th><th>Dátum</th><th class="rc">Stav km</th><th class="rc">Litre</th><th class="rc">Spotreba</th><th>Akcie</th></tr></thead><tbody>';
+  let html='<table class="rtable"><thead><tr><th class="rc">#</th><th>Dátum</th><th class="rc">Stav km</th><th class="rc">Litre</th><th class="rc">Km/nádrž</th><th class="rc">Spotreba</th><th>Akcie</th></tr></thead><tbody>';
   tankRecs.forEach((rec,i)=>{
     const dd=dFromKey(rec.datum).toLocaleDateString(loc,{day:'2-digit',month:'2-digit',year:'numeric'});
     const sp=rec.spotreba?`<span class="rtag b">${(+rec.spotreba).toFixed(2)} l/100km</span>`:'<span style="color:var(--muted);font-size:11px">—</span>';
-    html+=`<tr><td class="rnum">${i+1}</td><td class="rdate">${dd}</td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag g">${(+rec.litre||0).toFixed(1)} l</span></td><td style="text-align:center">${sp}</td><td><div class="racts"><button class="redit" onclick="openTankEdit(${i})">✏️</button><button class="rdel" onclick="delTank(${i})">✕</button></div></td></tr>`;
+    const nextRec = tankRecs[i+1];
+    const kmNadrz = nextRec ? ((+rec.km||0) - (+nextRec.km||0)) : null;
+    const kmNadrzHtml = kmNadrz && kmNadrz > 0 ? `<span class="rtag" style="background:rgba(139,92,246,.15);color:#a78bfa">${kmNadrz.toLocaleString()} km</span>` : '<span style="color:var(--muted);font-size:11px">—</span>';
+    html+=`<tr><td class="rnum">${i+1}</td><td class="rdate">${dd}</td><td style="text-align:center"><span class="rtag b">${(+rec.km||0).toLocaleString()} km</span></td><td style="text-align:center"><span class="rtag g">${(+rec.litre||0).toFixed(1)} l</span></td><td style="text-align:center">${kmNadrzHtml}</td><td style="text-align:center">${sp}</td><td><div class="racts"><button class="redit" onclick="openTankEdit(${i})">✏️</button><button class="rdel" onclick="delTank(${i})">✕</button></div></td></tr>`;
   });
   html+='</tbody></table>';body.innerHTML=html;
 }
